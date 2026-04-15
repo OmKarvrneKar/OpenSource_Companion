@@ -1,0 +1,147 @@
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────
+  # PostgreSQL — primary relational database
+  # ─────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: oc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: opensourcecompanion
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Redis — Celery broker + API cache
+  # AOF persistence enabled
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: oc_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # FastAPI backend
+  # Member 3 adds code to ./backend/
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oc_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./ml:/ml                  # ML service is imported directly by backend
+      - faiss_data:/app/faiss_index
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Next.js frontend
+  # Member 4 adds code to ./frontend/
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: oc_frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules          # preserve container node_modules on Windows
+      - /app/.next                 # preserve Next.js build cache
+    depends_on:
+      - backend
+
+  # ─────────────────────────────────────────
+  # Celery worker — background job processor
+  # Runs 4 job types:
+  #   process_new_issue
+  #   check_contribution_status
+  #   send_notifications
+  #   retrain_classifier
+  # ─────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oc_celery_worker
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./ml:/ml
+      - faiss_data:/app/faiss_index
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────
+  # Flower — Celery monitoring dashboard
+  # Visit: http://localhost:5555
+  # ─────────────────────────────────────────
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oc_flower
+    restart: unless-stopped
+    command: celery -A app.celery_app flower --port=5555
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery_worker
+
+# ─────────────────────────────────────────
+# Named volumes — data persists across restarts
+# ─────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  faiss_data:

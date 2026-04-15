@@ -1,0 +1,37 @@
+# Environment variables - never commit these
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+npm-debug.log
+
+# ML models and data
+*.pkl
+*.faiss
+data/raw/
+data/processed/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
