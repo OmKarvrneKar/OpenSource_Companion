@@ -29,8 +29,9 @@ from app.routers.webhooks import router as webhooks_router
 app.include_router(webhooks_router, tags=["Webhooks"])
 
 # Member 3: register your routers below as you build them
-# from app.routers import auth, recommendations, enrollments, gamification
-# app.include_router(auth.router,            prefix="/auth",            tags=["Auth"])
+from app.routers import auth
+app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+# from app.routers import recommendations, enrollments, gamification
 # app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
 # app.include_router(enrollments.router,     prefix="/enrollments",     tags=["Enrollments"])
 # app.include_router(gamification.router,    prefix="/gamification",    tags=["Gamification"])

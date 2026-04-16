@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   # ─────────────────────────────────────────
@@ -44,7 +42,6 @@ services:
 
   # ─────────────────────────────────────────
   # FastAPI backend
-  # Member 3 adds code to ./backend/
   # ─────────────────────────────────────────
   backend:
     build:
@@ -58,7 +55,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./ml:/ml                  # ML service is imported directly by backend
+      - ./ml:/ml
       - faiss_data:/app/faiss_index
     depends_on:
       db:
@@ -73,7 +70,6 @@ services:
 
   # ─────────────────────────────────────────
   # Next.js frontend
-  # Member 4 adds code to ./frontend/
   # ─────────────────────────────────────────
   frontend:
     build:
@@ -87,18 +83,15 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules          # preserve container node_modules on Windows
-      - /app/.next                 # preserve Next.js build cache
+      - /app/node_modules
+      - /app/.next
     depends_on:
       - backend
 
   # ─────────────────────────────────────────
-  # Celery worker — background job processor
-  # Runs 4 job types:
-  #   process_new_issue
-  #   check_contribution_status
-  #   send_notifications
-  #   retrain_classifier
+  # Celery Worker — processes background jobs
+  # 4 concurrency slots, one task at a time each
+  # Handles: process_new_issue, process_pr_merged
   # ─────────────────────────────────────────
   celery_worker:
     build:
@@ -106,7 +99,7 @@ services:
       dockerfile: Dockerfile
     container_name: oc_celery_worker
     restart: unless-stopped
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A celery_worker worker --loglevel=info --concurrency=4
     env_file:
       - .env
     volumes:
@@ -120,8 +113,34 @@ services:
         condition: service_healthy
 
   # ─────────────────────────────────────────
+  # Celery Beat — periodic task scheduler
+  # IMPORTANT: Only one Beat instance allowed
+  # Handles: check_contribution_status (6h)
+  #          send_notifications (5min)
+  #          retrain_classifier (30 days)
+  # ─────────────────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oc_celery_beat
+    restart: unless-stopped
+    command: celery -A celery_beat beat --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - celery_beat_data:/app/celerybeat-schedule  # persists beat schedule
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────
   # Flower — Celery monitoring dashboard
   # Visit: http://localhost:5555
+  # See: task queue, worker status, retries
   # ─────────────────────────────────────────
   flower:
     build:
@@ -129,7 +148,7 @@ services:
       dockerfile: Dockerfile
     container_name: oc_flower
     restart: unless-stopped
-    command: celery -A app.celery_app flower --port=5555
+    command: celery -A celery_worker flower --port=5555 --basic_auth=admin:admin
     env_file:
       - .env
     ports:
@@ -139,9 +158,10 @@ services:
       - celery_worker
 
 # ─────────────────────────────────────────
-# Named volumes — data persists across restarts
+# Named volumes
 # ─────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:
   faiss_data:
+  celery_beat_data:

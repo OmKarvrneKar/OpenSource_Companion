@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "opensourcecompanion",
+  "private_key_id": "f7b57262cfa93e2ab6b465f3ff75ae8763b1e3df",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCVdqzET/Im6yGq\nHqVf7kA9gtk1E0iP6lJSZkPe4X2zX1FAKrLbe7f5zT3lRpMuchBsKiEej9rC8GMG\nQ3gHlf693cMLgHn0tREk5EnWxSTfiv/drD1e4B0LgkJXxuBpB/iGulcyTKfU2SHQ\nEt8iuX0u+LCGTARDYQ/FQ8JzDdlTsbjLV43Zsp5wAfNe1erhE+pZicSkXVYKyQT1\n8eOMFjw0yryP4MyZBE9XZ36DlPC0VnCO9c7G64CqAqna8VWhjcslUUnujRWC9o0m\nDRz+hwIweg3ox2AjWnZObqjIX/OB/zkSG6B9ZyhWjbbsGZKHF1CjxRwjYQu7egZA\nXwGyWydJAgMBAAECggEAFv4C787N6oIV/gHpi3YEOIeDexsJ+Ob2s6mlsTNbpJdP\nfCEqvdbXY2cuVAc6Uapxr6H/fEsW6ma+ZP1GCVdgBmcx6k1g9W2mmIKXKqHN3VGY\nW3UemmoRgxljs/W/xIiEXn1rN9f7os5QLvO9kwLuffulyX2yKNyqkhGtZ7OZW2Vp\nszaG0JPdVEwpBZihNj7cnSWP3keDN5gakvJtGQS5c9ZcqdC6NxpuQR0ckS8vWg0U\nuVukQZQhkhRkBeiYlk5+ytKbyD0vpU3NL1GCM1U3DHzK4F4Eoyyxlf8qjzRGeR0H\nDbW5vWSYPe2DAOmqVXJQqVazsadLBQ4fSkq8w2SeHQKBgQDHJOIVvDzoh9plVhEK\nWeC3aKZarbHGag70tZ31BvfYOPh1JUixojyceHol9x2s2+IyqCWuU0tAdbLrICdF\nds+6G8i5dD+YxF2AWvuKWwGH6fLPvE63s9ZIIe4NmZPra3csPap44mi0AWAXSuyT\n0upX7CEAstrZqTwnNF4Vja3ZKwKBgQDAIrmA+XYRhPM0PDTYs6+eMv9wQ9QkjYns\nWnCfzvk0LAnKnZbtkyGn3KqWm/YwbDG+hWOd77oSQVjtFJzaCEhV2gWqvNLehOLP\nxY7JoFQLoWVGdMRNbpgCdsyMxG51oWHuebPtB7VOuttG6fWdpn1PovqpTr5ufzKl\nvf0AiehfWwKBgHPTAt/LZM2FvkM0JKMVlTp3VlHlNkGFi/9N5noNvHb446EWt0oB\nZylGdRzBtnPES7JU092pOlpaWl6gi9a9/KFs6XjboOWUSCGQST62IZTQP9YM2ufD\nY/z+Jvun+D1zepOzpgO7A1S2fBHwFNsBUCUlBCjo3Zq88GyI67OzfIqTAoGAOPsT\nYLia119CcT9ZvNqtPpGJR9YV2DFRshKwS/Sp21skHD7YP+TemlXLEZd3T60Go6YT\ngQdTe459vPHcAp1qNmvOOnB9aRin206PpiQySLC4xEhk30HpOvHYf/bRe3k8/eiB\n/83Fa2/nEATansJ9b1y6UfPUbhizAIxzt/EuRPkCgYApNg8YnZMpBMQM++X0kpQP\nL1f3ByvDBlAGVIMdln1Jus8Z5xwyRL6ZmzGg7UkJw9xixSYvrIy92i3NG5gkoGjz\ngMzFftXe8CKArt8blE6cB79vmG7GUEulk7nnhQIDFCLF/ul4TKcLH2sx+yGaBxu4\nd9X7p1deiWFFxggQQoM3pA==\n-----END PRIVATE KEY-----\n",
+  "client_email": "opensourcecompanion@opensourcecompanion.iam.gserviceaccount.com",
+  "client_id": "116373898115199216427",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/opensourcecompanion%40opensourcecompanion.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

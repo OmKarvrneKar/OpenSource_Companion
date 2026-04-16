@@ -1,0 +1,129 @@
+# ── .github/workflows/test.yml ──────────────────────────────────
+# Runs on every Pull Request to main
+# Blocks merge if tests fail
+# ────────────────────────────────────────────────────────────────
+
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: opensourcecompanion_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run Alembic migrations on test DB
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/opensourcecompanion_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci
+          GITHUB_WEBHOOK_SECRET: test-webhook-secret
+          ENVIRONMENT: test
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/opensourcecompanion_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci
+          GITHUB_WEBHOOK_SECRET: test-webhook-secret
+          ENVIRONMENT: test
+        run: |
+          cd backend
+          pytest tests/ -v --tb=short
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── GUARD: skip entirely if frontend not built yet ──────────
+      # Remove this step once Member 4 has set up the Next.js project
+      - name: Check if frontend exists
+        id: check_frontend
+        run: |
+          if [ -f "frontend/package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Frontend not built yet — skipping frontend tests"
+          fi
+
+      - name: Set up Node 20
+        if: steps.check_frontend.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        if: steps.check_frontend.outputs.exists == 'true'
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run lint
+        if: steps.check_frontend.outputs.exists == 'true'
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Run build check
+        if: steps.check_frontend.outputs.exists == 'true'
+        run: |
+          cd frontend
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000

@@ -1,0 +1,71 @@
+# ── infra/railway.toml ──────────────────────────────────────────
+# Railway service configuration
+# Defines all services Railway needs to run
+# ────────────────────────────────────────────────────────────────
+
+[build]
+builder = "dockerfile"
+
+# ── Backend (FastAPI) ─────────────────────────────────────────────
+[[services]]
+name = "backend"
+source = "backend"
+dockerfile = "backend/Dockerfile.prod"
+
+[services.deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.variables]
+PORT = "8000"
+
+# ── Frontend (Next.js) ────────────────────────────────────────────
+[[services]]
+name = "frontend"
+source = "frontend"
+dockerfile = "frontend/Dockerfile"
+
+[services.deploy]
+startCommand = "npm run start"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.variables]
+PORT = "3000"
+
+# ── Celery Worker ─────────────────────────────────────────────────
+[[services]]
+name = "celery-worker"
+source = "backend"
+dockerfile = "backend/Dockerfile.prod"
+
+[services.deploy]
+startCommand = "celery -A celery_worker worker --loglevel=info --concurrency=2"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ── Celery Beat ───────────────────────────────────────────────────
+[[services]]
+name = "celery-beat"
+source = "backend"
+dockerfile = "backend/Dockerfile.prod"
+
+[services.deploy]
+# IMPORTANT: only 1 replica — never scale beat horizontally
+startCommand = "celery -A celery_beat beat --loglevel=info"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ── Flower (monitoring) ───────────────────────────────────────────
+[[services]]
+name = "flower"
+source = "backend"
+dockerfile = "backend/Dockerfile.prod"
+
+[services.deploy]
+startCommand = "celery -A celery_worker flower --port=$PORT"
+restartPolicyType = "on_failure"
+
+[services.variables]
+PORT = "5555"

@@ -1,54 +1,43 @@
-# ── celery_app.py ───────────────────────────────────────────────
-# Celery configuration — connects to Redis broker
-# Import this in tasks.py and main.py
-# ────────────────────────────────────────────────────────────────
+"""
+backend/app/celery_app.py
+Celery application instance and configuration.
+"""
 
-from celery import Celery
 import os
-from dotenv import load_dotenv
+from celery import Celery
 
-load_dotenv()
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-
-celery_app = Celery(
+celery = Celery(
     "opensource_companion",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.tasks"]   # auto-discovers all tasks in tasks.py
+    include=[
+        "app.workers.sync_issues",
+        "app.workers.compute_embeddings",
+        "app.workers.award_badges",
+        "app.workers.send_notifications",
+    ],
 )
 
-celery_app.conf.update(
-    # Serialization
+# Alias so that `from app.celery_app import celery_app` works everywhere
+celery_app = celery
+
+celery.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
-    # Timezone
     timezone="UTC",
     enable_utc=True,
-
-    # Retry settings — dead letter queue after 3 retries
-    task_max_retries=3,
-    task_acks_late=True,           # only ack after task completes (safer)
-    worker_prefetch_multiplier=1,  # one task at a time per worker slot
-
-    # Beat schedule — periodic tasks
+    task_track_started=True,
+    task_acks_late=True,                    # re-queue if worker crashes mid-task
+    worker_prefetch_multiplier=1,           # one task at a time per worker
+    result_expires=3600,                    # results kept for 1 hour
     beat_schedule={
-        # Check every 6 hours if enrolled users have opened a PR
-        "check-contribution-status": {
-            "task": "app.tasks.check_contribution_status",
-            "schedule": 21600.0,   # 6 hours in seconds
+        # Auto-sync all repos every 6 hours
+        "sync-all-repos-every-6h": {
+            "task": "app.workers.sync_issues.sync_all_repos",
+            "schedule": 6 * 60 * 60,
         },
-        # Send pending notifications every 5 minutes
-        "send-notifications": {
-            "task": "app.tasks.send_notifications",
-            "schedule": 300.0,     # 5 minutes
-        },
-        # Retrain classifier every 30 days
-        "retrain-classifier": {
-            "task": "app.tasks.retrain_classifier",
-            "schedule": 2592000.0, # 30 days
-        },
-    }
+    },
 )

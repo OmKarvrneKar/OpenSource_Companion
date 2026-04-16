@@ -1,0 +1,56 @@
+# ── backend/Dockerfile.prod ─────────────────────────────────────
+# Production-optimized backend image
+# Differences from dev Dockerfile:
+#   - No --reload flag on uvicorn
+#   - Multi-stage build (smaller final image)
+#   - Non-root user for security
+#   - No dev tools installed
+# ────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Build dependencies ──────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build tools (only needed for compiling packages)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages into /build/wheels
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+
+
+# ── Stage 2: Final image ─────────────────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only runtime system deps
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser
+
+# Copy pre-built wheels from builder stage
+COPY --from=builder /build/wheels /wheels
+RUN pip install --no-cache-dir /wheels/* \
+    && rm -rf /wheels
+
+# Copy application code
+COPY . .
+
+# Set ownership to non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port (Railway injects $PORT env variable)
+EXPOSE 8000
+
+# Production startup — no --reload, use multiple workers
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
