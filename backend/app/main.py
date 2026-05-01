@@ -28,12 +28,14 @@ app.add_middleware(
 from app.routers.webhooks import router as webhooks_router
 app.include_router(webhooks_router, tags=["Webhooks"])
 
-# Member 3: register your routers below as you build them
-# from app.routers import auth, recommendations, enrollments, gamification
-# app.include_router(auth.router,            prefix="/auth",            tags=["Auth"])
-# app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
-# app.include_router(enrollments.router,     prefix="/enrollments",     tags=["Enrollments"])
-# app.include_router(gamification.router,    prefix="/gamification",    tags=["Gamification"])
+# Member 3 Routers
+from app.routers import auth, recommendations, enrollments, contributions, gamification, users
+app.include_router(auth.router, prefix="/auth")
+app.include_router(recommendations.router, prefix="/recommendations")
+app.include_router(enrollments.router, prefix="/enrollments")
+app.include_router(contributions.router, prefix="/contributions")
+app.include_router(gamification.router, prefix="/gamification")
+app.include_router(users.router, prefix="/users")
 
 
 # ── Health check ──────────────────────────────────────────────────
