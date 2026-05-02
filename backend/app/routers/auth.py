@@ -1,170 +1,134 @@
-"""
-backend/app/routers/auth.py
-GitHub OAuth flow:
-  GET /auth/github   → redirect user to GitHub to authorize
-  GET /auth/callback → GitHub redirects back here with code, exchange for JWT
-  POST /auth/refresh → refresh an expiring JWT
-"""
+# ── routers/auth.py ─────────────────────────────────────────────
+# Auth endpoints — GitHub OAuth callback, token refresh, logout
+# All responses follow the { message, data } envelope contract
+# ────────────────────────────────────────────────────────────────
 
-import os
-import httpx
 import logging
-from datetime import datetime, timedelta, timezone
+from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
-from jose import jwt
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies.auth import get_current_user
 from app.models import User
+from app.schemas.auth import (
+    AuthResponse,
+    GitHubCallbackRequest,
+    LoginData,
+    LogoutRequest,
+    RefreshData,
+    RefreshTokenRequest,
+    UserResponse,
+)
+from app.services.auth_service import (
+    create_access_token,
+    create_refresh_token,
+    exchange_github_code,
+    fetch_github_user,
+    upsert_user,
+    verify_token,
+)
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
-# ── Config ────────────────────────────────────────────────────────
 
-GITHUB_CLIENT_ID     = os.getenv("GITHUB_CLIENT_ID")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-FRONTEND_URL         = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# ── POST /auth/github/callback ──────────────────────────────────
 
-JWT_SECRET_KEY              = os.getenv("JWT_SECRET_KEY", "changeme")
-JWT_ALGORITHM               = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_ACCESS_TOKEN_EXPIRE_MINS = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-
-# ── Helpers ───────────────────────────────────────────────────────
-
-def _create_jwt(user_id: int) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINS)
-    payload = {"sub": str(user_id), "exp": expire}
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-
-def _get_or_create_user(github_user: dict, db: Session) -> tuple[User, bool]:
-    """Returns (user, is_new_user)."""
-    github_id = github_user["id"]
-    user = db.query(User).filter(User.github_id == github_id).first()
-
-    if user:
-        # Update mutable fields on every login
-        user.avatar_url = github_user.get("avatar_url")
-        user.email      = github_user.get("email")
-        db.commit()
-        return user, False
-
-    # First login — create the user
-    new_user = User(
-        github_id       = github_id,
-        github_username = github_user.get("login", ""),
-        email           = github_user.get("email"),
-        avatar_url      = github_user.get("avatar_url"),
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user, True
-
-
-# ── Routes ────────────────────────────────────────────────────────
-
-@router.get("/github")
-def github_login():
-    """
-    Step 1: Redirect the user to GitHub's OAuth authorization page.
-    """
-    if not GITHUB_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_ID not configured")
-
-    github_oauth_url = (
-        "https://github.com/login/oauth/authorize"
-        f"?client_id={GITHUB_CLIENT_ID}"
-        "&scope=user:email"
-    )
-    return RedirectResponse(url=github_oauth_url)
-
-
-@router.get("/callback")
-def github_callback(
-    code: str = Query(..., description="Temporary code from GitHub"),
-    db:   Session = Depends(get_db),
+@router.post("/github/callback", response_model=AuthResponse, status_code=200)
+async def github_callback(
+    body: GitHubCallbackRequest,
+    db: Session = Depends(get_db),
 ):
     """
-    Step 2: GitHub redirects here after the user authorises.
-    Exchange the code for an access token, fetch the user profile,
-    upsert the User row, then redirect the frontend with a JWT.
+    Exchange a GitHub OAuth authorization code for JWT tokens.
+    Creates the user on first login, updates profile on subsequent logins.
     """
-    # Exchange code for GitHub access token
-    token_resp = httpx.post(
-        "https://github.com/login/oauth/access_token",
-        json={
-            "client_id":     GITHUB_CLIENT_ID,
-            "client_secret": GITHUB_CLIENT_SECRET,
-            "code":          code,
-        },
-        headers={"Accept": "application/json"},
-        timeout=10,
-    )
-
-    token_data = token_resp.json()
-    access_token = token_data.get("access_token")
-
-    if not access_token:
-        logger.error(f"GitHub token exchange failed: {token_data}")
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=oauth_failed")
-
-    # Fetch GitHub user profile
-    user_resp = httpx.get(
-        "https://api.github.com/user",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Accept":        "application/vnd.github+json",
-        },
-        timeout=10,
-    )
-
-    if user_resp.status_code != 200:
-        logger.error(f"GitHub /user fetch failed: {user_resp.text}")
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=github_api_failed")
-
-    github_user = user_resp.json()
-
-    # Upsert user in DB
+    # 1. Exchange code for GitHub access token
     try:
-        user, is_new = _get_or_create_user(github_user, db)
-    except Exception as exc:
-        logger.error(f"DB upsert failed: {exc}")
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=db_error")
+        github_access_token = await exchange_github_code(body.code)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
 
-    # Issue JWT
-    jwt_token = _create_jwt(user.id)
+    # 2. Fetch user profile from GitHub
+    try:
+        github_user = await fetch_github_user(github_access_token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
 
-    # Redirect back to frontend — frontend stores the token in localStorage
-    redirect_url = (
-        f"{FRONTEND_URL}/auth/callback"
-        f"?token={jwt_token}"
-        f"&new_user={'true' if is_new else 'false'}"
+    # 3. Upsert user into PostgreSQL
+    try:
+        user = upsert_user(db, github_user)
+    except Exception as e:
+        logger.error(f"User upsert failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create or update user record",
+        )
+
+    # 4. Generate JWT tokens
+    user_id = cast(int, user.id)
+    access_token = create_access_token(user_id)
+    refresh_token = create_refresh_token(user_id)
+
+    logger.info(f"Login successful: {user.github_username} (id={user.id})")
+
+    return AuthResponse(
+        message="Login successful",
+        data=LoginData(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserResponse.model_validate(user),
+        ),
     )
-    return RedirectResponse(url=redirect_url)
 
 
-@router.post("/refresh")
-def refresh_token(
-    token: str,
-    db:    Session = Depends(get_db),
+# ── POST /auth/refresh ──────────────────────────────────────────
+
+@router.post("/refresh", response_model=AuthResponse, status_code=200)
+def refresh_token(body: RefreshTokenRequest):
+    """
+    Issue a new access token using a valid refresh token.
+    The refresh token itself is NOT rotated — it stays valid until expiry.
+    """
+    user_id = verify_token(body.refresh_token, expected_type="refresh")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    new_access_token = create_access_token(user_id)
+
+    return AuthResponse(
+        message="Token refreshed",
+        data=RefreshData(access_token=new_access_token),
+    )
+
+
+# ── POST /auth/logout ───────────────────────────────────────────
+
+@router.post("/logout", response_model=AuthResponse, status_code=200)
+def logout(
+    body: LogoutRequest,
+    _current_user: User = Depends(get_current_user),
 ):
     """
-    Step 3 (optional): Refresh an expiring access token.
-    Expects the current JWT in the request body.
+    Logout the current user.
+    Currently a no-op on the server side — the frontend discards tokens.
+    Token blacklisting can be added later via Redis.
     """
-    try:
-        payload  = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id  = int(payload["sub"])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    # Future: blacklist body.refresh_token in Redis with TTL = remaining expiry
+    logger.info(f"User logged out: {_current_user.github_username}")
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return {"access_token": _create_jwt(user.id), "token_type": "bearer"}
+    return AuthResponse(
+        message="Logged out successfully",
+        data=None,
+    )

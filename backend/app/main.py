@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
+from app.routers import auth, contributions, enrollments, gamification, recommendations, users
+from app.routers.webhooks import router as webhooks_router
+
 app = FastAPI(
     title="OpenSource Companion API",
     description="Recommends GitHub issues to open source beginners",
@@ -24,17 +27,15 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────
 
-# Data pipeline webhook (Member 1)
-from app.routers.webhooks import router as webhooks_router
 app.include_router(webhooks_router, tags=["Webhooks"])
 
-# Member 3: register your routers below as you build them
-from app.routers import auth
+# Member 3 Routers
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
-# from app.routers import recommendations, enrollments, gamification
-# app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
-# app.include_router(enrollments.router,     prefix="/enrollments",     tags=["Enrollments"])
-# app.include_router(gamification.router,    prefix="/gamification",    tags=["Gamification"])
+app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
+app.include_router(enrollments.router, prefix="/enrollments", tags=["Enrollments"])
+app.include_router(contributions.router, prefix="/contributions", tags=["Contributions"])
+app.include_router(gamification.router, prefix="/gamification", tags=["Gamification"])
+app.include_router(users.router, prefix="/users", tags=["Users"])
 
 
 # ── Health check ──────────────────────────────────────────────────
