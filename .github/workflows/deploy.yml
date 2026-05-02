@@ -6,8 +6,10 @@
 name: Deploy to Railway
 
 on:
-  push:
-    branches: [main]
+  # Disabled — manual deployment only via Railway dashboard or explicit workflow dispatch
+  # push:
+  #   branches: [main]
+  workflow_dispatch:  # Allow manual trigger from Actions tab
 
 jobs:
   # ── Step 1: Run tests first ────────────────────────────────────
