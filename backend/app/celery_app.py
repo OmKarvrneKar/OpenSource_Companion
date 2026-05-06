@@ -7,9 +7,9 @@ from celery import Celery
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)  # Docker-injected vars take priority over .env file
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 
 celery_app = Celery(
     "opensource_companion",

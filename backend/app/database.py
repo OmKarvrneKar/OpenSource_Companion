@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)  # Docker-injected vars take priority over .env file
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 

@@ -16,7 +16,7 @@ from app.tasks import process_new_issue, process_pr_merged
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
 
 def verify_signature(payload_body: bytes, signature: str) -> bool:
